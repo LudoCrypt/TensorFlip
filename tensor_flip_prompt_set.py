@@ -65,11 +65,10 @@ class Script(scripts.Script):
         step = modules.shared.state.sampling_step
         working = F.pad(input, self._reversed_padding_repeated_twice, mode='constant')
         for option in self.settings:
-            if option[0] == 'flip':
-                if (int(option[1]) <= step <= int(option[2])) or (int(option[1]) < 0 or int(option[2]) < 0):
+            if ((int(option[1]) <= step <= int(option[2])) or int(option[2]) < 0) and int(option[1]) >= 0:
+                if option[0] == 'flip':
                     working = working.flip(0)
-            if option[0] == 'shuffle':
-                if (int(option[1]) <= step <= int(option[2])) or (int(option[1]) < 0 or int(option[2]) < 0):
+                if option[0] == 'shuffle':
                     working = working[torch.randperm(working.size(0))]
 
         return F.conv2d(working, weight, bias, self.stride, (0, 0), self.dilation, self.groups)
