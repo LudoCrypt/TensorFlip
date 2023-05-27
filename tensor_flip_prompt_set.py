@@ -26,6 +26,9 @@ class Script(scripts.Script):
         extracted = Script.extract(p.prompt)
         p.all_prompts = [Script.clean(string) for string in p.all_prompts]
         if (Script.check(extracted, 'flip') or Script.check(extracted, 'shuffle')):
+            p.extra_generation_params = {
+                "Tensor Operations": extracted
+            }
             self.__hijackConv2DMethods(p, extracted)
         else:
             self.__restoreConv2DMethods()
@@ -65,10 +68,38 @@ class Script(scripts.Script):
         step = modules.shared.state.sampling_step
         working = F.pad(input, self._reversed_padding_repeated_twice, mode='constant')
         for option in self.settings:
-            if ((int(option[1]) <= step <= int(option[2])) or int(option[2]) < 0) and int(option[1]) >= 0:
-                if option[0] == 'flip':
-                    working = working.flip(0)
-                if option[0] == 'shuffle':
-                    working = working[torch.randperm(working.size(0))]
+                name = option[0]
+                params = tuple(int(x) for x in option[1:])
+                if len(params) == 1:
+                    if step >= params[0]:
+                        if name == 'flip':
+                            working = working.flip(0)
+                        if name == 'shuffle':
+                            working = working[torch.randperm(working.size(0))]
+                elif len(params) == 2:
+                    if params[0] <= step < params[1]:
+                        if name == 'flip':
+                            working = working.flip(0)
+                        if name == 'shuffle':
+                            working = working[torch.randperm(working.size(0))]
+                elif len(params) == 3:
+                    if params[0] <= step < params[1] and (step - params[0]) % (params[2] + 1) == 0:
+                        if name == 'flip':
+                            working = working.flip(0)
+                        if name == 'shuffle':
+                            working = working[torch.randperm(working.size(0))]
+                elif len(params) == 4:
+                    start = params[0]
+                    end = params[1]
+                    num_steps = params[3]
+                    block_size = params[2]
+                    block_index = (step - start) // (num_steps + block_size)
+                    block_start = start + block_index * (num_steps + block_size)
+                    block_end = block_start + num_steps
+                    if block_start <= step < block_end and step < end and step >= start:
+                        if name == 'flip':
+                            working = working.flip(0)
+                        if name == 'shuffle':
+                            working = working[torch.randperm(working.size(0))]
 
         return F.conv2d(working, weight, bias, self.stride, (0, 0), self.dilation, self.groups)
